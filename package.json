@@ -1,0 +1,23 @@
+{
+  "name": "safelight-paint-layers",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Paint Layers extension for Safelight — brush colour onto up to four layers over the photo, each with a blend mode and opacity.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:gpu": "node test/gpu/run.cjs"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "safelight-extension"
+  ],
+  "license": "MIT"
+}
