@@ -273,6 +273,8 @@ export interface UITokens {
   readonly textSecondary: "var(--color-text-secondary)";
   readonly textMuted: "var(--color-text-muted)";
   readonly accent: "var(--color-accent)";
+  readonly sliderFill: "var(--color-slider-fill)";
+  readonly labelRed: "var(--color-label-red)";
 }
 
 export interface UiKit {
@@ -309,7 +311,13 @@ export interface SafelightAPI {
   unregisterProcessingStage(id: string): void;
   registerPanel(c: PanelContribution): void;
   registerSlot(c: SlotContribution): void;
-  components: { Slider: ComponentType<SliderProps> };
+  registerStylesheet(c: { id: string; css: string }): void;
+  components: {
+    Slider: ComponentType<SliderProps>;
+    /** A titled section; inside the dock panel of the same name it is just the
+     *  padded content. */
+    Panel: ComponentType<{ title: string; defaultOpen?: boolean; children?: ReactNode }>;
+  };
   ui: UiKit;
   stores: {
     create<T>(init: StateCreator<T>): StoreApi<T>;
@@ -324,6 +332,10 @@ export interface SafelightAPI {
     setCanvasTool(tool: CanvasTool | null): void;
     /** React hook: whether this extension holds the canvas tool. */
     useCanvasToolHeld(): boolean;
+    /** Values the live view draws over the photo's own for this extension's
+     *  stages, by qualified key; null clears. View-only: never saved or
+     *  exported. Needs Safelight 3.2.1. */
+    setViewValues(values: Record<string, unknown> | null): void;
     setCanvasCursor(
       cursor: string | CursorContribution | null,
       opts?: { priority?: number },

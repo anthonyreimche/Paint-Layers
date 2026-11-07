@@ -27,11 +27,15 @@ describe("stage contract", () => {
   it("declares a mode, opacity and visibility per layer slot", () => {
     expect(MAX_LAYERS).toBe(4);
     expect(stage.uniforms.map((u) => [u.key, u.glslType, u.default])).toEqual(
-      [0, 1, 2, 3].flatMap((i) => [
-        [`mode${i}`, "int", 0],
-        [`opacity${i}`, "float", 1],
-        [`visible${i}`, "bool", true],
-      ]),
+      [
+        ...[0, 1, 2, 3].flatMap((i) => [
+          [`mode${i}`, "int", 0],
+          [`opacity${i}`, "float", 1],
+          [`visible${i}`, "bool", true],
+        ]),
+        ["highlight", "int", -1],
+        ["highlightStrength", "float", 0],
+      ],
     );
     expect(paramKey("opacity", 2)).toBe("paint-layers.composite.opacity2");
   });
@@ -43,6 +47,13 @@ describe("stage contract", () => {
 });
 
 describe("GLSL", () => {
+  it("tints the highlighted layer's coverage last, in the masks' hover colour", () => {
+    const tint = "if (highlight >= 0) c = mix(c, vec3(0.9, 0.25, 0.25), layers(highlight, srcUv).a * highlightStrength);";
+    expect(INLINE_GLSL.endsWith(tint)).toBe(true);
+    expect(PARAM.highlight).toBe("paint-layers.composite.highlight");
+    expect(PARAM.highlightStrength).toBe("paint-layers.composite.highlightStrength");
+  });
+
   it("composites the four layers bottom to top at source-UV, each behind its visibility", () => {
     const order = [0, 1, 2, 3].map((i) =>
       INLINE_GLSL.indexOf(`if (visible${i}) c = plComposite(c, layers(${i}, srcUv), mode${i}, opacity${i});`),
@@ -87,7 +98,10 @@ describe("GLSL", () => {
 });
 
 describe("GPU cost", () => {
-  it("fetches each layer's tile once per pixel and nothing else", () => {
-    expect(inlineFetches(buildStage())).toBe(4);
+  it("fetches each layer's tile once per pixel, and the hovered layer's while one is tinted", () => {
+    expect(inlineFetches(buildStage())).toBe(5);
+    const tinted = INLINE_GLSL.split("\n").filter((line) => line.includes("layers(highlight"));
+    expect(tinted).toHaveLength(1);
+    expect(tinted[0].startsWith("if (highlight >= 0)")).toBe(true);
   });
 });

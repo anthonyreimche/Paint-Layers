@@ -1,9 +1,9 @@
-// The Develop panel: the layer list (top layer first, as it stacks), the chosen
-// layer's name, blend mode and opacity, and the brush — its colour and
-// settings, which are its own. Controls come from api.ui and api.components; inline
-// style only lays them out.
+// The Develop panel, laid out and styled like the Masking panel (styles.ts):
+// the add button, a status line with Paint/Done, the brush while it is on,
+// the layer list (top layer first, as it stacks; double-click a name to
+// rename), and the chosen layer's blend mode and opacity.
 
-import type { ChangeEvent, CSSProperties } from "react";
+import type { ChangeEvent, KeyboardEvent, MouseEvent } from "react";
 import { BLEND_MODES } from "./blend";
 import { MAX_LAYERS, readLayers, resolveActive, type Layer } from "./layers";
 import {
@@ -16,13 +16,15 @@ import {
 } from "./persistence";
 import { api, h } from "./runtime";
 import { store } from "./store";
+import { cls } from "./styles";
+import { highlightLayer } from "./highlight";
 
 const MODE_OPTIONS = BLEND_MODES.map((m, i) => ({ value: String(i), label: m.label }));
 
 export function PaintPanel() {
   const a = api();
-  const Slider = a.components.Slider;
-  const { Button, Field, Row, Section, Select, Stack, TextInput, Toggle, tokens } = a.ui;
+  const { Panel, Slider } = a.components;
+  const { Select, tokens } = a.ui;
   const dev = a.stores.useDevelopStore;
   const react = a.react;
 
@@ -35,7 +37,7 @@ export function PaintPanel() {
   const brushOpacity = store()((s) => s.brushOpacity);
   const brushFlow = store()((s) => s.brushFlow);
   const brushErase = store()((s) => s.brushErase);
-  const renamed = react.useRef(false);
+  const [renaming, setRenaming] = react.useState<{ id: string; value: string } | null>(null);
   const held = a.develop.useCanvasToolHeld();
 
   // Another tool took the canvas (crop, masks, heal): the brush goes off.
@@ -45,7 +47,15 @@ export function PaintPanel() {
 
   const layers = readLayers(paramBag);
   const active = resolveActive(layers, activeId);
-  const hint: CSSProperties = { fontSize: "10px", lineHeight: 1.4, color: tokens.textMuted };
+
+  // The hovered row's layer is tinted on the image, as a hovered mask is;
+  // its slot follows the layer when the list changes under the pointer.
+  const [hoveredId, setHoveredId] = react.useState<string | null>(null);
+  const hoveredSlot = hoveredId ? layers.findIndex((l) => l.id === hoveredId) : -1;
+  react.useEffect(() => {
+    highlightLayer(hoveredSlot >= 0 ? hoveredSlot : null);
+  }, [hoveredSlot]);
+  react.useEffect(() => () => highlightLayer(null), []);
 
   const select = (id: string) => store().getState().setActiveLayer(id);
 
@@ -54,106 +64,166 @@ export function PaintPanel() {
     if (id) select(id);
   };
 
+  const on = (yes: boolean) => (yes ? ` ${cls.on}` : "");
+  // A button inside a row acts without also choosing the row's layer.
+  const inRow = (act: () => void) => (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    act();
+  };
+
+  const finishRename = () => {
+    if (!renaming) return;
+    const name = renaming.value.trim();
+    const layer = layers.find((l) => l.id === renaming.id);
+    setRenaming(null);
+    if (layer && name && name !== layer.name) setLayer(layer.id, { name }, "Rename Paint Layer");
+  };
+
+  const layerName = (layer: Layer) =>
+    renaming?.id === layer.id
+      ? h("input", {
+          autoFocus: true,
+          value: renaming.value,
+          maxLength: 40,
+          "aria-label": "Layer name",
+          className: cls.rename,
+          onClick: (e: MouseEvent<HTMLInputElement>) => e.stopPropagation(),
+          onChange: (e: ChangeEvent<HTMLInputElement>) => setRenaming({ id: layer.id, value: e.currentTarget.value }),
+          onBlur: finishRename,
+          onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") setRenaming(null);
+          },
+        })
+      : h(
+          "span",
+          {
+            className: cls.name,
+            title: "Double-click to rename",
+            onDoubleClick: (e: MouseEvent<HTMLSpanElement>) => {
+              e.stopPropagation();
+              setRenaming({ id: layer.id, value: layer.name });
+            },
+          },
+          layer.name || "Untitled",
+          h("span", { className: cls.muted }, ` (${BLEND_MODES[layer.mode]?.label ?? "Normal"})`),
+        );
+
   const layerRow = (layer: Layer, slot: number) =>
     h(
-      Row,
-      { key: layer.id, gap: 4 },
-      h(Toggle, {
-        checked: layer.visible,
-        ariaLabel: layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`,
-        onChange: (v: boolean) => setLayer(layer.id, { visible: v }, v ? "Show Paint Layer" : "Hide Paint Layer"),
-      }),
+      "div",
+      {
+        key: layer.id,
+        title: "Paint on this layer",
+        className: cls.row + on(layer.id === active?.id) + (layer.visible ? "" : ` ${cls.off}`),
+        onClick: () => select(layer.id),
+        onMouseEnter: () => setHoveredId(layer.id),
+        onMouseLeave: () => setHoveredId(null),
+      },
       h(
-        Button,
+        "button",
         {
-          size: "sm",
-          variant: "ghost",
-          active: layer.id === active?.id,
-          title: "Paint on this layer",
-          style: { flex: 1, justifyContent: "flex-start", minWidth: 0, overflow: "hidden" },
-          onClick: () => select(layer.id),
+          type: "button",
+          title: layer.visible ? "Hide" : "Show",
+          "aria-label": layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`,
+          "aria-pressed": layer.visible,
+          className: cls.eye + (layer.visible ? "" : ` ${cls.hidden}`),
+          // Hovering the visibility toggle shouldn't tint the layer.
+          onMouseEnter: () => setHoveredId(null),
+          onMouseLeave: () => setHoveredId(layer.id),
+          onClick: inRow(() =>
+            setLayer(layer.id, { visible: !layer.visible }, layer.visible ? "Hide Paint Layer" : "Show Paint Layer"),
+          ),
         },
-        layer.name || "Untitled",
+        layer.visible ? "◉" : "○",
       ),
+      layerName(layer),
       h(
-        Button,
+        "button",
         {
-          size: "sm",
-          variant: "ghost",
+          type: "button",
           title: "Move up",
           "aria-label": `Move ${layer.name} up`,
+          className: `${cls.act} ${cls.reveal}`,
           disabled: slot === layers.length - 1,
-          onClick: () => shiftLayer(layer.id, 1),
+          onClick: inRow(() => shiftLayer(layer.id, 1)),
         },
         "↑",
       ),
       h(
-        Button,
+        "button",
         {
-          size: "sm",
-          variant: "ghost",
+          type: "button",
           title: "Move down",
           "aria-label": `Move ${layer.name} down`,
+          className: `${cls.act} ${cls.reveal}`,
           disabled: slot === 0,
-          onClick: () => shiftLayer(layer.id, -1),
+          onClick: inRow(() => shiftLayer(layer.id, -1)),
         },
         "↓",
       ),
       h(
-        Button,
+        "button",
         {
-          size: "sm",
-          variant: "ghost",
+          type: "button",
           title: "Delete layer",
           "aria-label": `Delete ${layer.name}`,
-          onClick: () => removeLayer(layer.id),
+          className: `${cls.remove} ${cls.reveal}`,
+          onClick: inRow(() => removeLayer(layer.id)),
         },
         "×",
       ),
     );
 
-  const layerSettings = (layer: Layer) =>
+  const layerEditor = (layer: Layer) =>
     h(
-      Stack,
-      { gap: 6 },
+      "div",
+      { className: cls.editor },
       h(
-        Field,
-        { label: "Name" },
-        h(TextInput, {
-          value: layer.name,
-          maxLength: 40,
-          "aria-label": "Layer name",
-          onChange: (v: string) => {
-            renamed.current = true;
-            setLayer(layer.id, { name: v });
-          },
-          onBlur: () => {
-            if (!renamed.current) return;
-            renamed.current = false;
-            commitDrag("Rename Paint Layer");
-          },
-        }),
-      ),
-      h(
-        Field,
-        { label: "Blend mode" },
+        "div",
+        { className: cls.section },
+        h(
+          "div",
+          { className: cls.head },
+          h("span", { className: cls.caption }, "Blending"),
+          h(
+            "button",
+            {
+              type: "button",
+              title: "Reset this layer's blend mode and opacity",
+              className: cls.reset,
+              onClick: () => setLayer(layer.id, { mode: 0, opacity: 1 }, "Reset Paint Layer"),
+            },
+            "Reset",
+          ),
+        ),
         h(Select, {
           value: String(layer.mode),
           options: MODE_OPTIONS,
           ariaLabel: "Blend mode",
           onChange: (v: string) => setLayer(layer.id, { mode: Number(v) }, "Paint Layer Blend Mode"),
         }),
+        h(Slider, {
+          label: "Opacity",
+          value: Math.round(layer.opacity * 100),
+          min: 0,
+          max: 100,
+          step: 1,
+          defaultValue: 100,
+          onChange: (v: number) => setLayer(layer.id, { opacity: v / 100 }),
+          onCommit: () => commitDrag("Paint Layer Opacity"),
+        }),
+        h(
+          "button",
+          {
+            type: "button",
+            className: cls.addComponent,
+            disabled: layer.dabs.length === 0,
+            onClick: () => clearLayer(layer.id),
+          },
+          "Clear Layer",
+        ),
       ),
-      h(Slider, {
-        label: "Opacity",
-        value: Math.round(layer.opacity * 100),
-        min: 0,
-        max: 100,
-        step: 1,
-        defaultValue: 100,
-        onChange: (v: number) => setLayer(layer.id, { opacity: v / 100 }),
-        onCommit: () => commitDrag("Paint Layer Opacity"),
-      }),
     );
 
   // Brush settings, shown as percentages like the masking panel does.
@@ -182,86 +252,78 @@ export function PaintPanel() {
 
   const d = store().getState();
   const topFirst = layers.map((layer, slot) => ({ layer, slot })).reverse();
+  const atCap = layers.length >= MAX_LAYERS;
+  const status = armed
+    ? active
+      ? `${brushErase ? "Erase from" : "Paint on"} ${active.name || "Untitled"}`
+      : "Paint to add a layer"
+    : `${layers.length}/${MAX_LAYERS} layers`;
 
   return h(
-    Stack,
-    { gap: 10, style: { padding: "6px 8px 8px" } },
+    Panel,
+    { title: "Paint Layers", defaultOpen: true },
     h(
-      Section,
-      {
-        title: "Layers",
-        right: h(
-          Button,
-          { size: "sm", disabled: layers.length >= MAX_LAYERS, onClick: add },
-          "Add layer",
-        ),
-      },
-      layers.length === 0
-        ? h("span", { style: hint }, "No layers yet. Add one, or turn the brush on and paint.")
-        : h(Stack, { gap: 2 }, topFirst.map(({ layer, slot }) => layerRow(layer, slot))),
-      active ? layerSettings(active) : null,
-    ),
-    h(
-      Section,
-      {
-        title: "Brush",
-        right: h(
-          Button,
-          { size: "sm", active: armed, onClick: () => store().getState().toggleArmed() },
-          armed ? "Done" : "Paint",
-        ),
-      },
+      "div",
+      { className: cls.panel },
       h(
-        Row,
-        { gap: 8 },
-        h("input", {
-          type: "color",
-          value: color,
-          "aria-label": "Brush colour",
-          title: "Brush colour",
-          onChange: (e: ChangeEvent<HTMLInputElement>) => store().getState().setColor(e.currentTarget.value),
-          style: {
-            width: "32px",
-            height: "22px",
-            padding: 0,
-            border: `1px solid ${tokens.border}`,
-            borderRadius: "3px",
-            background: "transparent",
-            cursor: "pointer",
-          },
-        }),
-        h("span", { style: { fontSize: "11px", color: tokens.textSecondary } }, "Colour"),
+        "button",
+        {
+          type: "button",
+          className: cls.create,
+          disabled: atCap,
+          title: atCap ? `Layer limit reached (${MAX_LAYERS})` : undefined,
+          onClick: add,
+        },
+        "+ Add Layer",
       ),
       h(
-        Stack,
-        { gap: 1 },
-        brushSlider("Size", brushSize, 1, 8, (v) => d.setBrushSize(v), 50),
-        brushSlider("Feather", brushFeather, 0, 50, (v) => d.setBrushFeather(v)),
-        brushSlider("Flow", brushFlow, 1, 100, (v) => d.setBrushFlow(v)),
-        brushSlider("Opacity", brushOpacity, 1, 100, (v) => d.setBrushOpacity(v)),
-      ),
-      h(
-        Row,
-        { gap: 8, justify: "space-between" },
-        h(Toggle, { checked: brushErase, onChange: (v: boolean) => d.setBrushErase(v), label: "Erase" }),
+        "div",
+        { className: cls.head },
+        h("span", { className: cls.hint }, status),
         h(
-          Button,
-          {
-            size: "sm",
-            variant: "ghost",
-            disabled: !active || active.dabs.length === 0,
-            onClick: () => active && clearLayer(active.id),
-          },
-          "Clear layer",
+          "button",
+          { type: "button", className: cls.done, onClick: () => d.toggleArmed() },
+          armed ? "Done" : "Paint",
         ),
       ),
       armed
         ? h(
-            "span",
-            { style: hint },
-            "Alt erases, Shift+click paints a straight line, Ctrl or Space pans and zooms, Esc when done.",
+            "div",
+            { className: cls.brush },
+            h(
+              "label",
+              { className: cls.erase },
+              h("input", {
+                type: "color",
+                value: color,
+                "aria-label": "Brush colour",
+                className: cls.colour,
+                onChange: (e: ChangeEvent<HTMLInputElement>) => d.setColor(e.currentTarget.value),
+              }),
+              "Colour",
+            ),
+            brushSlider("Size", brushSize, 1, 8, (v) => d.setBrushSize(v), 50),
+            brushSlider("Feather", brushFeather, 0, 50, (v) => d.setBrushFeather(v)),
+            brushSlider("Opacity", brushOpacity, 1, 100, (v) => d.setBrushOpacity(v)),
+            brushSlider("Flow", brushFlow, 1, 100, (v) => d.setBrushFlow(v)),
+            h(
+              "label",
+              { className: cls.erase },
+              h("input", {
+                type: "checkbox",
+                checked: brushErase,
+                onChange: (e: ChangeEvent<HTMLInputElement>) => d.setBrushErase(e.currentTarget.checked),
+                style: { accentColor: tokens.sliderFill },
+              }),
+              "Erase",
+              h("span", { className: cls.muted }, "· Alt erase · [ ] size · ⇧ feather · , . opacity · ⇧, ⇧. flow"),
+            ),
           )
         : null,
+      layers.length > 0
+        ? h("div", { className: cls.list }, topFirst.map(({ layer, slot }) => layerRow(layer, slot)))
+        : null,
+      active ? layerEditor(active) : null,
     ),
   );
 }

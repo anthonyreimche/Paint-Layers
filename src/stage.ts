@@ -9,7 +9,7 @@
 //
 // Identifier rules: uniform and texture keys are rewritten into the stage's
 // namespace by whole-identifier replace, so the GLSL below uses `layers`,
-// `mode0`…`visible3` only as those, and the helpers' names carry a `pl`
+// `mode0`…`visible3`, `highlight` and `highlightStrength` only as those, and the helpers' names carry a `pl`
 // prefix that no engine helper uses.
 
 import type { ProcessingStageContribution, UniformDeclaration } from "./safelight";
@@ -29,7 +29,26 @@ export const paramKey = (key: SlotKey, slot: number): string => `${STAGE_ID}.${k
 
 export const PARAM = {
   layers: `${STAGE_ID}.layers`,
+  /** View-only (api.develop.setViewValues): the layer slot tinted while its
+   *  row is hovered, and how strongly, as the masks' coverage is. */
+  highlight: `${STAGE_ID}.highlight`,
+  highlightStrength: `${STAGE_ID}.highlightStrength`,
 } as const;
+
+/** The masks' hover tint: core's coverage colour and its full strength. */
+export const HIGHLIGHT_COLOUR = [0.9, 0.25, 0.25] as const;
+export const HIGHLIGHT_STRENGTH = 0.5;
+
+const HIGHLIGHT_UNIFORMS: UniformDeclaration[] = [
+  {
+    key: "highlight",
+    glslType: "int",
+    default: -1,
+    range: { min: -1, max: MAX_LAYERS - 1, step: 1 },
+    label: "Highlighted layer",
+  },
+  { key: "highlightStrength", glslType: "float", default: 0, range: { min: 0, max: 1 }, label: "Highlight strength" },
+];
 
 const SLOTS = Array.from({ length: MAX_LAYERS }, (_, i) => i);
 
@@ -104,9 +123,12 @@ vec3 plComposite(vec3 c, vec4 paint, int mode, float opacity) {
   return mix(c, plBlend(mode, clamp(c, 0.0, 1.0), paint.rgb), a);
 }`;
 
-export const INLINE_GLSL = SLOTS.map(
-  (i) => `if (visible${i}) c = plComposite(c, layers(${i}, srcUv), mode${i}, opacity${i});`,
-).join("\n");
+const [hr, hg, hb] = HIGHLIGHT_COLOUR;
+
+export const INLINE_GLSL = [
+  ...SLOTS.map((i) => `if (visible${i}) c = plComposite(c, layers(${i}, srcUv), mode${i}, opacity${i});`),
+  `if (highlight >= 0) c = mix(c, vec3(${hr}, ${hg}, ${hb}), layers(highlight, srcUv).a * highlightStrength);`,
+].join("\n");
 
 export function buildStage(): ProcessingStageContribution {
   return {
@@ -115,7 +137,7 @@ export function buildStage(): ProcessingStageContribution {
     phase: "effects",
     presetScope: "per-image",
     space: { encoding: "perceptual" },
-    uniforms: SLOTS.flatMap(slotUniforms),
+    uniforms: [...SLOTS.flatMap(slotUniforms), ...HIGHLIGHT_UNIFORMS],
     textures: [{ key: "layers", kind: "paint" }],
     helpers: HELPERS,
     glsl: INLINE_GLSL,

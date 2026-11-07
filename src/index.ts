@@ -13,12 +13,15 @@ import { buildStage, EXT_ID, STAGE_ID } from "./stage";
 import { PAINT_TOOL } from "./Overlay";
 import { PaintPanel } from "./Panel";
 import { resetAll } from "./persistence";
+import { paintLayersCss, STYLESHEET_ID } from "./styles";
+import { stopHighlight } from "./highlight";
 
 let unfollow: (() => void) | null = null;
 
 export function activate(host: SafelightAPI): void {
   initRuntime(host);
   initStore();
+  host.registerStylesheet({ id: STYLESHEET_ID, css: paintLayersCss(host.ui.tokens) });
   host.registerProcessingStage(buildStage());
 
   // The brush on holds the canvas; off lets it go.
@@ -41,6 +44,7 @@ export function deactivate(): void {
   // starts clean.
   try {
     store().getState().setArmed(false);
+    stopHighlight();
     unfollow?.();
     unfollow = null;
     api().develop.setCanvasTool(null);

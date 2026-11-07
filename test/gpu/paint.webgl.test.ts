@@ -88,6 +88,19 @@ describe("paint layers on the GPU", () => {
     expect(frame({}).data).toEqual(frame(null).data);
   });
 
+  it("tints a highlighted layer's coverage toward the masks' hover red, hidden or not", () => {
+    const base = frame(null);
+    const out = frame({
+      [PARAM.layers]: [{ id: "a", name: "A", dabs: FULL(COLOUR) }],
+      [paramKey("visible", 0)]: false,
+      [PARAM.highlight]: 0,
+      [PARAM.highlightStrength]: 0.5,
+    });
+    const red: Rgb = [0.9, 0.25, 0.25];
+    const err = worst(out, base, (c) => [0, 1, 2].map((ch) => c[ch] + (red[ch] - c[ch]) * 0.5) as Rgb);
+    expect(err).toBeLessThan(5e-3);
+  });
+
   it("is a bit-exact no-op with its one layer hidden", () => {
     const hidden = frame({
       [PARAM.layers]: [{ id: "a", name: "A", dabs: FULL(COLOUR) }],

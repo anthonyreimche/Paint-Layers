@@ -40,10 +40,11 @@ interface Registered {
   panels: PanelContribution[];
   unregistered: string[];
   tools: (CanvasTool | null)[];
+  stylesheets: string[];
 }
 
 function fakeApi(): { api: SafelightAPI; registered: Registered } {
-  const registered: Registered = { stages: [], panels: [], unregistered: [], tools: [] };
+  const registered: Registered = { stages: [], panels: [], unregistered: [], tools: [], stylesheets: [] };
   // Only the members activate() touches are populated, hence the partial cast.
   const api = {
     version: 1,
@@ -51,6 +52,8 @@ function fakeApi(): { api: SafelightAPI; registered: Registered } {
     registerProcessingStage: (c: ProcessingStageContribution) => void registered.stages.push(c),
     unregisterProcessingStage: (id: string) => void registered.unregistered.push(id),
     registerPanel: (c: PanelContribution) => void registered.panels.push(c),
+    registerStylesheet: (c: { id: string; css: string }) => void registered.stylesheets.push(c.id),
+    ui: { tokens: {} },
     stores: { create: fakeStore },
     develop: { setCanvasTool: (t: CanvasTool | null) => void registered.tools.push(t) },
   } as Partial<SafelightAPI> as SafelightAPI;
@@ -66,6 +69,7 @@ describe("activate", () => {
     expect(registered.stages.map((s) => s.id)).toEqual(["paint-layers.composite"]);
     expect(registered.panels.map((p) => [p.id, p.title])).toEqual([["paint-layers.panel", "Paint Layers"]]);
     expect(registered.panels[0].defaultDock?.module).toBe("develop");
+    expect(registered.stylesheets).toEqual(["safelight-paint-layers.styles"]);
   });
 
   it("starts with the brush off, no layer chosen and a white brush of its own", () => {
