@@ -17,6 +17,11 @@ export interface BrushDab {
   flow?: number;
   /** First dab of a pointer stroke: opacity caps each stroke on its own. */
   strokeStart?: boolean;
+  /** Read from a stroke's `strokeStart` dab: the brush tip it stamps. An id
+   *  nothing holds bakes as the round disc. */
+  tip?: string;
+  /** Turns the dab's tip, in radians; a dab without one takes its stroke's. */
+  angle?: number;
 }
 
 /** A brush dab that lays colour: `color` is display-encoded sRGB, 0 to 1. A
@@ -30,6 +35,47 @@ export interface PaintDab extends BrushDab {
 export interface PaintLayer {
   id: string;
   dabs: PaintDab[];
+}
+
+/** A brush tip (api.develop.registerBrushTip): the shape a brush stamps in
+ *  place of its round, feathered disc. `alpha` is the shape's coverage, 0 to
+ *  255, row by row from the top, `width * height` bytes. */
+export interface BrushTipContribution {
+  /** Unique across extensions; a dab stores it, so keep it stable. */
+  id: string;
+  label: string;
+  alpha: {
+    width: number;
+    height: number;
+    data: Uint8Array;
+  };
+  /** Heading a picker files the tip under. */
+  group?: string;
+  /** The brush settings the tip was made for, which a painter loads when the
+   *  tip is picked. */
+  brush?: BrushTipSettings;
+}
+
+/** A tip's own brush settings. Each is optional; a painter uses its own
+ *  default for one left out. */
+export interface BrushTipSettings {
+  /** Distance between dabs, as a fraction of the diameter: 0.01 to 10. */
+  spacing?: number;
+  /** How far a dab may land off the stroke, across it, as a fraction of the
+   *  diameter: 0 to 10. */
+  scatter?: number;
+  /** Dabs laid at each spacing step: a whole number from 1 to 16. */
+  count?: number;
+  /** How much smaller a dab may come out, at random: 0 (never) to 1 (down to nothing). */
+  sizeJitter?: number;
+  /** How far a dab may turn at random: 0 (never) to 1 (a full turn either way). */
+  angleJitter?: number;
+  /** How much less a dab may deposit, at random: 0 to 1. */
+  flowJitter?: number;
+  /** The tip's turn, in radians. */
+  angle?: number;
+  /** Turn each dab along the stroke's direction, on top of `angle`. */
+  followStroke?: boolean;
 }
 
 export interface StoreApi<T> {
@@ -326,6 +372,13 @@ export interface SafelightAPI {
     useSettings: StoreApi<AppSettings>;
   };
   develop: {
+    /** Every registered brush tip, whichever extension registered it, in the
+     *  order they came. The same array until the set changes. Needs Safelight
+     *  3.2.5. */
+    brushTips(): readonly BrushTipContribution[];
+    /** React hook: brushTips(), re-rendering as tips come and go. Needs
+     *  Safelight 3.2.5. */
+    useBrushTips(): readonly BrushTipContribution[];
     useDevelopOverlay(): DevelopOverlayState;
     /** Hold the canvas with this tool, or let it go (null). One extension
      *  holds it at a time: the last to set it. */

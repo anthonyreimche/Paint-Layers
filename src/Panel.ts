@@ -15,9 +15,11 @@ import {
   shiftLayer,
 } from "./persistence";
 import { api, h } from "./runtime";
-import { store } from "./store";
+import { dynamicsOf, store } from "./store";
 import { cls } from "./styles";
 import { highlightLayer } from "./highlight";
+import { groupTips, tipThumbnail } from "./tips";
+import type { BrushTipContribution } from "./safelight";
 
 const MODE_OPTIONS = BLEND_MODES.map((m, i) => ({ value: String(i), label: m.label }));
 
@@ -37,6 +39,16 @@ export function PaintPanel() {
   const brushOpacity = store()((s) => s.brushOpacity);
   const brushFlow = store()((s) => s.brushFlow);
   const brushErase = store()((s) => s.brushErase);
+  const tipId = store()((s) => s.tip);
+  const brushSpacing = store()((s) => s.brushSpacing);
+  const brushScatter = store()((s) => s.brushScatter);
+  const brushCount = store()((s) => s.brushCount);
+  const brushSizeJitter = store()((s) => s.brushSizeJitter);
+  const brushAngle = store()((s) => s.brushAngle);
+  const brushAngleJitter = store()((s) => s.brushAngleJitter);
+  const brushFollowStroke = store()((s) => s.brushFollowStroke);
+  const brushFlowJitter = store()((s) => s.brushFlowJitter);
+  const tips = a.develop.useBrushTips();
   const [renaming, setRenaming] = react.useState<{ id: string; value: string } | null>(null);
   const held = a.develop.useCanvasToolHeld();
 
@@ -226,7 +238,8 @@ export function PaintPanel() {
       ),
     );
 
-  // Brush settings, shown as percentages like the masking panel does.
+  // Brush settings, shown as percentages like the masking panel does; `scale`
+  // is the UI unit per stored unit (degrees for an angle in radians, 1 for a count).
   const brushSlider = (
     label: string,
     value: number,
@@ -234,21 +247,81 @@ export function PaintPanel() {
     defaultValue: number,
     set: (v: number) => void,
     max = 100,
+    scale = 100,
   ) =>
     h(Slider, {
       key: label,
       label,
-      value: Math.round(value * 100),
+      value: Math.round(value * scale),
       min,
       max,
       step: 1,
       defaultValue,
       onChange: (v: number) => {
-        set(v / 100);
+        set(v / scale);
         store().getState().setBrushPreview(true);
       },
       onCommit: () => store().getState().setBrushPreview(false),
     });
+
+  // A tip that is no longer registered (its extension is off) shows as Round.
+  const pickedTip = tips.find((t) => t.id === tipId) ?? null;
+  const tipDefaults = dynamicsOf(pickedTip?.brush);
+  const dynamics = (patch: Parameters<typeof d.setBrushDynamics>[0]) => d.setBrushDynamics(patch);
+
+  const tipButton = (tip: BrushTipContribution) => {
+    const url = tipThumbnail(tip);
+    return h(
+      "button",
+      {
+        key: tip.id,
+        type: "button",
+        title: tip.label,
+        "aria-label": tip.label,
+        "aria-pressed": tip.id === pickedTip?.id,
+        className: cls.tip + on(tip.id === pickedTip?.id),
+        onClick: () => d.pickTip(tip.id, tip.brush),
+      },
+      url ? h("img", { src: url, alt: "", draggable: false }) : null,
+    );
+  };
+
+  const tipPicker = () =>
+    h(
+      "div",
+      { className: cls.section },
+      h("span", { className: cls.caption }, "Brush"),
+      h(
+        "div",
+        { className: cls.tips },
+        h(
+          "button",
+          {
+            type: "button",
+            title: "Round",
+            "aria-label": "Round",
+            "aria-pressed": pickedTip === null,
+            className: cls.tip + on(pickedTip === null),
+            onClick: () => d.pickTip(null),
+          },
+          h("span", { className: cls.round }),
+        ),
+        groupTips(tips).flatMap((g) => (g.group === undefined ? g.tips.map(tipButton) : [])),
+      ),
+      ...groupTips(tips)
+        .filter((g) => g.group !== undefined)
+        .map((g) =>
+          h(
+            "div",
+            { key: g.group, className: cls.section },
+            h("span", { className: cls.caption }, g.group),
+            h("div", { className: cls.tips }, g.tips.map(tipButton)),
+          ),
+        ),
+      tips.length === 0
+        ? h("span", { className: cls.hint }, "Install Texture Brushes for fog, cloud and other brushes.")
+        : null,
+    );
 
   const d = store().getState();
   const topFirst = layers.map((layer, slot) => ({ layer, slot })).reverse();
@@ -302,10 +375,33 @@ export function PaintPanel() {
               }),
               "Colour",
             ),
+            tipPicker(),
             brushSlider("Size", brushSize, 1, 8, (v) => d.setBrushSize(v), 50),
-            brushSlider("Feather", brushFeather, 0, 50, (v) => d.setBrushFeather(v)),
+            pickedTip ? null : brushSlider("Feather", brushFeather, 0, 50, (v) => d.setBrushFeather(v)),
             brushSlider("Opacity", brushOpacity, 1, 100, (v) => d.setBrushOpacity(v)),
             brushSlider("Flow", brushFlow, 1, 100, (v) => d.setBrushFlow(v)),
+            pickedTip
+              ? [
+                  brushSlider("Spacing", brushSpacing, 1, Math.round(tipDefaults.brushSpacing * 100), (v) => dynamics({ brushSpacing: v }), 200),
+                  brushSlider("Scatter", brushScatter, 0, Math.round(tipDefaults.brushScatter * 100), (v) => dynamics({ brushScatter: v }), 200),
+                  brushSlider("Count", brushCount, 1, tipDefaults.brushCount, (v) => dynamics({ brushCount: v }), 16, 1),
+                  brushSlider("Size jitter", brushSizeJitter, 0, Math.round(tipDefaults.brushSizeJitter * 100), (v) => dynamics({ brushSizeJitter: v })),
+                  brushSlider("Angle", brushAngle, -180, Math.round((tipDefaults.brushAngle * 180) / Math.PI), (v) => dynamics({ brushAngle: v }), 180, 180 / Math.PI),
+                  brushSlider("Angle jitter", brushAngleJitter, 0, Math.round(tipDefaults.brushAngleJitter * 100), (v) => dynamics({ brushAngleJitter: v })),
+                  h(
+                    "label",
+                    { key: "Follow stroke", className: cls.erase },
+                    h("input", {
+                      type: "checkbox",
+                      checked: brushFollowStroke,
+                      onChange: (e: ChangeEvent<HTMLInputElement>) => dynamics({ brushFollowStroke: e.currentTarget.checked }),
+                      style: { accentColor: tokens.sliderFill },
+                    }),
+                    "Follow stroke",
+                  ),
+                  brushSlider("Flow jitter", brushFlowJitter, 0, Math.round(tipDefaults.brushFlowJitter * 100), (v) => dynamics({ brushFlowJitter: v })),
+                ]
+              : null,
             h(
               "label",
               { className: cls.erase },

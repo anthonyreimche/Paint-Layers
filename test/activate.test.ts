@@ -109,6 +109,59 @@ describe("activate", () => {
     });
   });
 
+  it("starts on the round brush with the tip dynamics at their defaults", () => {
+    const { api } = fakeApi();
+    activate(api);
+    expect(store().getState()).toMatchObject({
+      tip: null,
+      brushSpacing: 0.25,
+      brushScatter: 0,
+      brushCount: 1,
+      brushSizeJitter: 0,
+      brushAngleJitter: 0,
+      brushFlowJitter: 0,
+      brushAngle: 0,
+      brushFollowStroke: false,
+    });
+  });
+
+  it("loads a tip's own brush settings when it is picked, defaulting what it leaves out", () => {
+    const { api } = fakeApi();
+    activate(api);
+    const s = store().getState();
+    s.pickTip("tb.cloud", { spacing: 0.6, scatter: 0.6, count: 2, sizeJitter: 0.5, angleJitter: 1, followStroke: true });
+    expect(store().getState()).toMatchObject({
+      tip: "tb.cloud",
+      brushSpacing: 0.6,
+      brushScatter: 0.6,
+      brushCount: 2,
+      brushSizeJitter: 0.5,
+      brushAngleJitter: 1,
+      brushFlowJitter: 0,
+      brushAngle: 0,
+      brushFollowStroke: true,
+    });
+    store().getState().pickTip("tb.dust", undefined);
+    expect(store().getState()).toMatchObject({
+      tip: "tb.dust",
+      brushSpacing: 0.25,
+      brushScatter: 0,
+      brushCount: 1,
+      brushSizeJitter: 0,
+      brushAngleJitter: 0,
+      brushFollowStroke: false,
+    });
+  });
+
+  it("goes back to Round without touching the dynamics, and sets them one by one", () => {
+    const { api } = fakeApi();
+    activate(api);
+    store().getState().pickTip("tb.cloud", { spacing: 0.6 });
+    store().getState().setBrushDynamics({ brushScatter: 0.9, brushAngle: 1 });
+    store().getState().pickTip(null);
+    expect(store().getState()).toMatchObject({ tip: null, brushSpacing: 0.6, brushScatter: 0.9, brushAngle: 1 });
+  });
+
   it("holds the canvas tool while the brush is on and lets it go when off", () => {
     const { api, registered } = fakeApi();
     activate(api);

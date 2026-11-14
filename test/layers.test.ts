@@ -73,6 +73,16 @@ describe("readLayers", () => {
     ]);
   });
 
+  it("keeps a dab's tip and angle, and drops one whose tip or angle is malformed", () => {
+    const good = { ...dab(0.1), tip: "tb.fog", angle: 1.2 };
+    const bag = {
+      [PARAM.layers]: [
+        { id: "a", name: "A", dabs: [good, { ...dab(0.2), tip: 4 }, { ...dab(0.3), angle: "x" }] },
+      ],
+    };
+    expect(readLayers(bag)[0].dabs).toEqual([good]);
+  });
+
   it("reads only the first four layers, which are all core bakes", () => {
     const many = Array.from({ length: 6 }, (_, i) => ({ id: `l${i}`, name: `L${i}`, dabs: [] }));
     expect(readLayers({ [PARAM.layers]: many })).toHaveLength(MAX_LAYERS);

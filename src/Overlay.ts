@@ -8,12 +8,12 @@
 // brush slider is dragged; the paint itself shows in the render.
 
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { hexToRgb, lineDabs, makeDab, shouldStamp, type BrushState, type Dab, type Point } from "./brush";
+import { hexToRgb, lineDabs, resolveTip, shouldStamp, strokeDabs, type BrushState, type Dab, type Point } from "./brush";
 import { brushStep } from "./keys";
 import { beginStroke, continueStroke, endStroke } from "./persistence";
 import { api, h } from "./runtime";
 import type { CanvasTool } from "./safelight";
-import { store } from "./store";
+import { store, type PaintState } from "./store";
 
 const RING_STYLE: CSSProperties = {
   position: "absolute",
@@ -24,9 +24,10 @@ const RING_STYLE: CSSProperties = {
   pointerEvents: "none",
 };
 
-function brushState(s: BrushState): BrushState {
+function brushState(s: PaintState): BrushState {
   const { brushSize, brushFeather, brushOpacity, brushFlow, brushErase } = s;
-  return { brushSize, brushFeather, brushOpacity, brushFlow, brushErase };
+  const tip = resolveTip(s, api().develop.brushTips().map((t) => t.id));
+  return { brushSize, brushFeather, brushOpacity, brushFlow, brushErase, ...(tip ? { tip } : {}) };
 }
 
 function isEditable(t: EventTarget | null): boolean {
@@ -51,6 +52,10 @@ export function PaintOverlay() {
   const brushFeather = store()((s) => s.brushFeather);
   const brushErase = store()((s) => s.brushErase);
   const brushPreview = store()((s) => s.brushPreview);
+  const tipId = store()((s) => s.tip);
+  const tips = api().develop.useBrushTips();
+  // A tip has no feather, so its brush shows the one ring.
+  const feathered = !tips.some((t) => t.id === tipId);
   const { rect, imageRect, toImage, toScreen, radiusToScreen } = api().develop.useDevelopOverlay();
 
   const [gesture, setGesture] = react.useState(false);
@@ -125,7 +130,7 @@ export function PaintOverlay() {
       el.style.top = `${ly}px`;
     };
     place(ringRef.current, Math.max(3, px) * 2, show);
-    place(innerRef.current, Math.max(1, px * (1 - s.brushFeather)) * 2, show);
+    place(innerRef.current, Math.max(1, px * (1 - s.brushFeather)) * 2, show && !brushState(s).tip);
   };
 
   // Resize the ring the instant a shortcut or slider changes the brush, not
@@ -133,7 +138,7 @@ export function PaintOverlay() {
   react.useEffect(() => {
     if (cursor.current.shown) placeRing(cursor.current.lx, cursor.current.ly, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brushSize, brushFeather]);
+  }, [brushSize, brushFeather, feathered]);
 
   // Entering pan/zoom mode mid-stroke ends the stroke (committing what's
   // there) and hides the ring so the overlay visibly hands off to the canvas.
@@ -163,7 +168,7 @@ export function PaintOverlay() {
     const dabs: Dab[] =
       e.shiftKey && lastPoint.current
         ? lineDabs(lastPoint.current, p, brush, colour, aspect, e.altKey)
-        : [makeDab(p, brush, colour, e.altKey, true)];
+        : strokeDabs(p, { x: 0, y: 0 }, brush, colour, aspect, e.altKey, true, Math.random);
     const layerId = beginStroke(store().getState().activeLayerId, dabs);
     store().getState().setActiveLayer(layerId);
     lastPoint.current = p;
@@ -181,7 +186,11 @@ export function PaintOverlay() {
     const p = toImage(lx, ly);
     const brush = brushState(store().getState());
     if (!shouldStamp(s.last, p, brush, aspect)) return;
-    continueStroke(s.layerId, [makeDab(p, brush, hexToRgb(store().getState().color), e.altKey, false)]);
+    const heading = { x: p.x - s.last.x, y: p.y - s.last.y };
+    continueStroke(
+      s.layerId,
+      strokeDabs(p, heading, brush, hexToRgb(store().getState().color), aspect, e.altKey, false, Math.random),
+    );
     s.last = p;
     lastPoint.current = p;
   };
@@ -235,12 +244,14 @@ export function PaintOverlay() {
           "div",
           { style: { position: "absolute", inset: 0, pointerEvents: "none" } },
           h("div", { style: centred(Math.max(3, refPx) * 2, "1.5px solid rgba(255,255,255,0.9)", color) }),
-          h("div", {
-            style: centred(
-              Math.max(1, refPx * (1 - brushFeather)) * 2,
-              "1px solid rgba(255,255,255,0.45)",
-            ),
-          }),
+          feathered
+            ? h("div", {
+                style: centred(
+                  Math.max(1, refPx * (1 - brushFeather)) * 2,
+                  "1px solid rgba(255,255,255,0.45)",
+                ),
+              })
+            : null,
         )
       : null,
   );

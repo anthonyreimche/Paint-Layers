@@ -38,6 +38,9 @@ export const cls = {
   caption: `${P}-caption`,
   reset: `${P}-reset`,
   addComponent: `${P}-add-component`,
+  tips: `${P}-tips`,
+  tip: `${P}-tip`,
+  round: `${P}-round`,
 } as const;
 
 const tint = (color: string, percent: number) => `color-mix(in srgb, ${color} ${percent}%, transparent)`;
@@ -57,6 +60,12 @@ export function paintLayersCss(t: UITokens): string {
 :where(.${cls.erase}) { display: flex; align-items: center; gap: 0.375rem; padding: 0 0.125rem; font-size: 11px; color: ${t.textSecondary}; }
 :where(.${cls.colour}) { height: 0.875rem; width: 1.5rem; flex-shrink: 0; cursor: pointer; border-radius: 0.25rem; border: 1px solid ${t.borderSubtle}; background: transparent; padding: 0; }
 :where(.${cls.muted}) { color: ${t.textMuted}; }
+:where(.${cls.tips}) { display: flex; flex-wrap: wrap; gap: 0.125rem; }
+:where(.${cls.tip}) { display: flex; height: 2.25rem; width: 2.25rem; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 0.25rem; padding: 0.125rem; }
+:where(.${cls.tip}:hover) { background-color: ${t.surface2}; }
+:where(.${cls.tip}.${cls.on}) { background-color: ${tint(t.accent, 20)}; }
+:where(.${cls.tip} img) { height: 100%; width: 100%; border-radius: 0.125rem; object-fit: contain; }
+:where(.${cls.round}) { display: block; height: 100%; width: 100%; border-radius: 0.125rem; background: radial-gradient(circle, #ebebeb 35%, rgba(235, 235, 235, 0) 68%), #1c1c1c; }
 :where(.${cls.list} > :not(:last-child)) { margin-block: 0 0.125rem; }
 :where(.${cls.row}) { display: flex; cursor: pointer; align-items: center; gap: 0.375rem; border-radius: 0.25rem; padding: 0.25rem 0.375rem; font-size: 11px; color: ${t.textSecondary}; }
 :where(.${cls.row}:hover) { background-color: ${t.surface2}; }

@@ -1,12 +1,12 @@
 {
   "id": "paint-layers",
   "name": "Paint Layers",
-  "version": "1.0.0",
-  "minAppVersion": "3.2.1",
-  "description": "Paint brush strokes in any colour onto up to four layers over the photo, each with its own blend mode (Overlay, Soft Light, Multiply, Screen, Colour and more) and opacity.",
+  "version": "1.1.0",
+  "minAppVersion": "3.2.5",
+  "description": "Paint brush strokes in any colour onto up to four layers over the photo, each with its own blend mode (Overlay, Soft Light, Multiply, Screen, Colour and more) and opacity. Paints with the round brush or with any textured brush tip another extension offers, with spacing, scatter, count and jitter controls.",
   "author": "Anthony Reimche",
   "main": "dist/index.js",
   "categories": ["Develop", "Color"],
-  "keywords": ["safelight-extension", "paint", "brush", "layers", "blend mode", "dodge", "burn", "colour"],
+  "keywords": ["safelight-extension", "paint", "brush", "brush tip", "texture", "layers", "blend mode", "dodge", "burn", "colour"],
   "license": "MIT"
 }

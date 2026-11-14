@@ -37,6 +37,8 @@ function isPaintDab(value: unknown): value is PaintDab {
     finite(value.flow) &&
     typeof value.erase === "boolean" &&
     (value.strokeStart === undefined || typeof value.strokeStart === "boolean") &&
+    (value.tip === undefined || typeof value.tip === "string") &&
+    (value.angle === undefined || finite(value.angle)) &&
     Array.isArray(c) &&
     c.length === 3 &&
     c.every(finite)
