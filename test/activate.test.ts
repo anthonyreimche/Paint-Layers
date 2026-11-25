@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { activate, deactivate } from "../src/index";
 import { store } from "../src/store";
 import type {
+  BrushSetting,
+  BrushSettings,
   CanvasTool,
   PanelContribution,
   ProcessingStageContribution,
@@ -35,6 +37,23 @@ function fakeStore<T extends object>(init: StateCreator<T>): StoreApi<T> {
   return hook;
 }
 
+// The official brush as the fake hands it out. The defaults differ from the old
+// hard-coded ones so a test sees where a setting started from.
+const BRUSH_DEFAULTS: BrushSettings = { size: 0.12, feather: 0.4, opacity: 0.7, flow: 0.9 };
+
+const BRUSH_STEPS: Record<string, { key: BrushSetting; by: number }> = {
+  "brush.larger": { key: "size", by: 0.01 },
+  "brush.featherUp": { key: "feather", by: 0.05 },
+  "brush.opacityUp": { key: "opacity", by: 0.1 },
+  "brush.flowUp": { key: "flow", by: 0.1 },
+};
+
+function stepBrush(action: string, brush: Partial<BrushSettings>): { key: BrushSetting; value: number } | null {
+  const s = BRUSH_STEPS[action];
+  const now = s ? brush[s.key] : undefined;
+  return s && now !== undefined ? { key: s.key, value: now + s.by } : null;
+}
+
 interface Registered {
   stages: ProcessingStageContribution[];
   panels: PanelContribution[];
@@ -53,9 +72,12 @@ function fakeApi(): { api: SafelightAPI; registered: Registered } {
     unregisterProcessingStage: (id: string) => void registered.unregistered.push(id),
     registerPanel: (c: PanelContribution) => void registered.panels.push(c),
     registerStylesheet: (c: { id: string; css: string }) => void registered.stylesheets.push(c.id),
-    ui: { tokens: {} },
+    ui: { tokens: {}, ColourField: () => null } as unknown as SafelightAPI["ui"],
     stores: { create: fakeStore },
-    develop: { setCanvasTool: (t: CanvasTool | null) => void registered.tools.push(t) },
+    develop: {
+      setCanvasTool: (t: CanvasTool | null) => void registered.tools.push(t),
+      brush: { defaults: BRUSH_DEFAULTS, actions: Object.keys(BRUSH_STEPS), step: stepBrush },
+    } as Partial<SafelightAPI["develop"]>,
   } as Partial<SafelightAPI> as SafelightAPI;
   return { api, registered };
 }
@@ -72,7 +94,7 @@ describe("activate", () => {
     expect(registered.stylesheets).toEqual(["safelight-paint-layers.styles"]);
   });
 
-  it("starts with the brush off, no layer chosen and a white brush of its own", () => {
+  it("starts with the brush off, no layer chosen and a white brush at the official brush's defaults", () => {
     const { api } = fakeApi();
     activate(api);
     const s = store().getState();
@@ -80,10 +102,10 @@ describe("activate", () => {
       armed: false,
       activeLayerId: null,
       color: "#ffffff",
-      brushSize: 0.08,
-      brushFeather: 0.5,
-      brushOpacity: 1,
-      brushFlow: 1,
+      brushSize: BRUSH_DEFAULTS.size,
+      brushFeather: BRUSH_DEFAULTS.feather,
+      brushOpacity: BRUSH_DEFAULTS.opacity,
+      brushFlow: BRUSH_DEFAULTS.flow,
       brushErase: false,
       brushPreview: false,
     });
@@ -170,6 +192,13 @@ describe("activate", () => {
     expect(registered.tools.map((t) => t !== null)).toEqual([true, false]);
   });
 
+  it("leaves pan and zoom to core's own gesture handling", () => {
+    const { api, registered } = fakeApi();
+    activate(api);
+    store().getState().setArmed(true);
+    expect(registered.tools[0]?.zoomable).toBe(true);
+  });
+
   it("takes core's brush shortcuts while it holds the canvas", () => {
     const { api, registered } = fakeApi();
     activate(api);
@@ -177,7 +206,14 @@ describe("activate", () => {
     const tool = registered.tools[0];
     expect(tool?.wants?.("brush.larger")).toBe(true);
     expect(tool?.onAction?.("brush.larger")).toBe(true);
-    expect(store().getState().brushSize).toBe(0.09);
+    expect(store().getState().brushSize).toBeCloseTo(BRUSH_DEFAULTS.size + 0.01, 6);
+    expect(tool?.onAction?.("brush.opacityUp")).toBe(true);
+    expect(store().getState().brushOpacity).toBeCloseTo(BRUSH_DEFAULTS.opacity + 0.1, 6);
+    expect(tool?.onAction?.("brush.flowUp")).toBe(true);
+    expect(store().getState().brushFlow).toBeCloseTo(BRUSH_DEFAULTS.flow + 0.1, 6);
+    expect(tool?.onAction?.("brush.featherUp")).toBe(true);
+    expect(store().getState().brushFeather).toBeCloseTo(BRUSH_DEFAULTS.feather + 0.05, 6);
+    expect(tool?.wants?.("mask.delete")).toBe(false);
     expect(tool?.onAction?.("mask.delete")).toBe(false);
     tool?.onEscape?.();
     expect(store().getState().armed).toBe(false);

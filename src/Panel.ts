@@ -26,13 +26,15 @@ const MODE_OPTIONS = BLEND_MODES.map((m, i) => ({ value: String(i), label: m.lab
 export function PaintPanel() {
   const a = api();
   const { Panel, Slider } = a.components;
-  const { Select, tokens } = a.ui;
+  const { Select, ColourField, tokens } = a.ui;
   const dev = a.stores.useDevelopStore;
   const react = a.react;
 
   const armed = store()((s) => s.armed);
   const activeId = store()((s) => s.activeLayerId);
-  const color = store()((s) => s.color);
+  const colourHue = store()((s) => s.colourHue);
+  const colourSaturation = store()((s) => s.colourSaturation);
+  const colourLightness = store()((s) => s.colourLightness);
   const paramBag = dev((s) => s.paramBag);
   const brushSize = store()((s) => s.brushSize);
   const brushFeather = store()((s) => s.brushFeather);
@@ -363,18 +365,19 @@ export function PaintPanel() {
         ? h(
             "div",
             { className: cls.brush },
-            h(
-              "label",
-              { className: cls.erase },
-              h("input", {
-                type: "color",
-                value: color,
-                "aria-label": "Brush colour",
-                className: cls.colour,
-                onChange: (e: ChangeEvent<HTMLInputElement>) => d.setColor(e.currentTarget.value),
-              }),
-              "Colour",
-            ),
+            h(ColourField, {
+              label: "Colour",
+              title: "The colour the brush paints",
+              hue: colourHue,
+              saturation: colourSaturation,
+              lightness: colourLightness,
+              onChange: (c) =>
+                d.setColourChannels({
+                  hue: c.hue,
+                  saturation: c.saturation ?? colourSaturation,
+                  lightness: c.lightness ?? colourLightness,
+                }),
+            }),
             tipPicker(),
             brushSlider("Size", brushSize, 1, 8, (v) => d.setBrushSize(v), 50),
             pickedTip ? null : brushSlider("Feather", brushFeather, 0, 50, (v) => d.setBrushFeather(v)),

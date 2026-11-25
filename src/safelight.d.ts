@@ -323,6 +323,54 @@ export interface UITokens {
   readonly labelRed: "var(--color-label-red)";
 }
 
+/** Display-encoded sRGB, 0 to 1. */
+export type Rgb = readonly [number, number, number];
+
+export interface Hsl {
+    /** Degrees, 0 to 360. */
+    hue: number;
+    /** Percent, 0 to 100. */
+    saturation: number;
+    /** Percent, 0 to 100. */
+    lightness: number;
+}
+
+/** The channels a field has: always hue, saturation and lightness when given. */
+export interface ColourValue {
+    hue: number;
+    saturation?: number;
+    lightness?: number;
+}
+
+export interface ColourFieldProps {
+    label: string;
+    /** Degrees, 0 to 360. */
+    hue: number;
+    /** Percent, 0 to 100. Leave it out for a hue-only field. */
+    saturation?: number;
+    /** Percent, 0 to 100. Give it for a field that also sets lightness. */
+    lightness?: number;
+    /** Live while a drag lasts, and once for a key, hex or pick; carries the
+     *  field's channels only. */
+    onChange(value: ColourValue): void;
+    /** A drag ended, or a key, hex or pick changed the colour. */
+    onCommit?(): void;
+    /** The colour to show for hue, saturation and lightness (a missing channel
+     *  comes as 100 and 50), display sRGB 0 to 1. Default: HSL. */
+    toRgb?(hue: number, saturation: number, lightness: number): Rgb;
+    /** A typed or picked colour (display sRGB 0 to 1) in the field's channels.
+     *  Default: HSL. */
+    fromRgb?(rgb: Rgb): Hsl;
+    /** The eyedropper. `true` (the default) takes the colour the view shows;
+     *  `{ paramBag }` samples a capture with that bag merged over the photo's,
+     *  to leave the extension's own effect out; `false` hides it. */
+    pick?: boolean | {
+        paramBag: Record<string, unknown>;
+    };
+    /** The swatch's tooltip. */
+    title?: string;
+}
+
 export interface UiKit {
   Button: ComponentType<ButtonProps>;
   Select: ComponentType<SelectProps>;
@@ -332,6 +380,8 @@ export interface UiKit {
   Section: ComponentType<SectionProps>;
   Row: ComponentType<RowProps>;
   Stack: ComponentType<StackProps>;
+  /** A colour control: a swatch as wide as the row that opens a picker, and an eyedropper. Needs Safelight 3.2.8. */
+  ColourField(props: ColourFieldProps): import("react").JSX.Element;
   tokens: UITokens;
 }
 
@@ -365,6 +415,13 @@ export interface SafelightAPI {
     Panel: ComponentType<{ title: string; defaultOpen?: boolean; children?: ReactNode }>;
   };
   ui: UiKit;
+  /** Cursor vocabulary: `resolve` turns a token id (built-in or one a cursor
+   *  theme has overridden) into a concrete CSS `cursor` value. An unknown token
+   *  is returned as-is. Non-reactive: read it at render. */
+  cursors: {
+    labels: Readonly<Record<string, string>>;
+    resolve(token: string): string;
+  };
   stores: {
     create<T>(init: StateCreator<T>): StoreApi<T>;
     useDevelopStore: StoreApi<DevelopStoreState>;
@@ -393,5 +450,70 @@ export interface SafelightAPI {
       cursor: string | CursorContribution | null,
       opts?: { priority?: number },
     ): () => void;
+    /** The official brush every painting tool shares: Masking's. A tool holds
+     *  its own settings and starts them from `defaults` (size is a radius as a
+     *  share of the photo's height, as a BrushDab's; feather, opacity and flow
+     *  run 0 to 1). `actions` are the rebindable brush shortcuts' keybinding
+     *  ids ([ and ] size, Shift+[ and Shift+] feather, comma and period
+     *  opacity, Shift+comma and Shift+period flow), which core hands only to the
+     *  held canvas tool: answer CanvasTool.onAction and wants with `step`,
+     *  passing the settings the tool has. It returns the setting a shortcut
+     *  changes and its new value, held to its range, or null for one the tool
+     *  doesn't have, which core then leaves alone. Needs Safelight 3.2.7. */
+    brush: {
+      defaults: Readonly<BrushSettings>;
+      actions: readonly string[];
+      step: typeof stepBrush;
+    };
+    /** The official brush ring, for a canvas tool's overlay: the brush's edge
+     *  and its feathered core at `at` (overlay layout px, from framePoint; or
+     *  "centre", the reference a size slider shows while dragged), sized as a
+     *  dab paints in the photo through any crop, zoom or Perspective; red and
+     *  dashed for an erasing brush. It draws around the crosshair cursor, as
+     *  Masking's brush does. Needs Safelight 3.2.7. */
+    BrushCursor: typeof BrushCursor;
+    /** The pointer in `el`'s layout px: the space an overlay's `rect`, the
+     *  mapping helpers and CSS left/top use. Interface scale zooms the page,
+     *  so clientX minus the element's left is off by the zoom. Needs Safelight
+     *  3.2.7. */
+    framePoint(el: Element, clientX: number, clientY: number): {
+      x: number;
+      y: number;
+    };
   };
 }
+
+export interface BrushSettings {
+  size: number;
+  feather: number;
+  opacity: number;
+  flow: number;
+}
+
+export type BrushSetting = keyof BrushSettings;
+
+/** The setting a brush shortcut changes and its value after the step, held to
+ *  its range; null for an action that isn't a brush shortcut, or one for a
+ *  setting `brush` doesn't have, so a tool without flow leaves the flow keys
+ *  alone. A canvas tool answers onAction and wants with it. */
+declare function stepBrush(action: string, brush: Partial<BrushSettings>): {
+  key: BrushSetting;
+  value: number;
+} | null;
+
+export interface BrushCursorProps {
+  /** The pointer in the overlay's layout px (api.develop.framePoint), or
+   *  "centre" for the reference ring a size slider shows; null draws nothing. */
+  at: {
+    x: number;
+    y: number;
+  } | "centre" | null;
+  /** The brush's radius, a share of the photo's height. */
+  size: number;
+  /** 0 to 1: how much of the radius fades. */
+  feather: number;
+  /** An erasing (subtracting) brush, drawn red and dashed. */
+  erase?: boolean;
+}
+
+declare function BrushCursor({ at, size, feather, erase }: BrushCursorProps): import("react").JSX.Element | null;

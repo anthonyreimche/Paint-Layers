@@ -20,7 +20,6 @@ export const cls = {
   done: `${P}-done`,
   brush: `${P}-brush`,
   erase: `${P}-erase`,
-  colour: `${P}-colour`,
   muted: `${P}-muted`,
   list: `${P}-list`,
   row: `${P}-row`,
@@ -58,7 +57,6 @@ export function paintLayersCss(t: UITokens): string {
 :where(.${cls.brush}) { border-radius: 0.25rem; background-color: ${tint(t.surface2, 50)}; padding: 0.375rem; }
 :where(.${cls.brush} > :not(:last-child)) { margin-block: 0 0.125rem; }
 :where(.${cls.erase}) { display: flex; align-items: center; gap: 0.375rem; padding: 0 0.125rem; font-size: 11px; color: ${t.textSecondary}; }
-:where(.${cls.colour}) { height: 0.875rem; width: 1.5rem; flex-shrink: 0; cursor: pointer; border-radius: 0.25rem; border: 1px solid ${t.borderSubtle}; background: transparent; padding: 0; }
 :where(.${cls.muted}) { color: ${t.textMuted}; }
 :where(.${cls.tips}) { display: flex; flex-wrap: wrap; gap: 0.125rem; }
 :where(.${cls.tip}) { display: flex; height: 2.25rem; width: 2.25rem; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 0.25rem; padding: 0.125rem; }
