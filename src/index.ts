@@ -34,6 +34,7 @@ export function activate(host: SafelightAPI): void {
     title: "Paint Layers",
     component: PaintPanel,
     defaultDock: { module: "develop", direction: "right", order: 9, width: 250 },
+    modules: ["develop"],
     onReset: () => void resetAll(),
   });
 }

@@ -865,6 +865,7 @@ function Ie(e) {
 			order: 9,
 			width: 250
 		},
+		modules: ["develop"],
 		onReset: () => void ve()
 	});
 }
